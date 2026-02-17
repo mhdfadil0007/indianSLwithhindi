@@ -479,3 +479,4 @@ i changed the versions in requirements.txt to match my python version of 3.12.3
 - so i retrained the model again, but the accuracy only pumped to 40 percent
 - so i tried data augmentation(which means to add horizontally flipped versions of each sample) and also added probabiity=True for proper confidence scores(on train_alphabets_static.py)
 - this increased the accuracy to 90 percent, but still some letters were not accurate
+- so i added feature extraction to it and retrained the data again

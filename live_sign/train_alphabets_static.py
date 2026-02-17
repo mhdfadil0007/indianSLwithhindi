@@ -16,12 +16,20 @@ y = np.load(os.path.join(DATA_DIR, "y.npy"))
 print("Static alphabet data loaded:", X.shape, y.shape)
 
 def augment_flip(X, y):
+    n_landmarks = 63
+    n_distances = 5 + 10 + 4
+    
     X_flipped = X.copy()
     for i in range(len(X_flipped)):
         for j in range(21):
             idx = j * 3
             X_flipped[i, idx] = 1.0 - X_flipped[i, idx]
             X_flipped[i, idx + 2] = -X_flipped[i, idx + 2]
+        
+        dist_start = n_landmarks
+        for k in range(n_distances):
+            X_flipped[i, dist_start + k] = X_flipped[i, dist_start + k]
+    
     return np.vstack([X, X_flipped]), np.concatenate([y, y])
 
 print("Augmenting with horizontal flip...")
