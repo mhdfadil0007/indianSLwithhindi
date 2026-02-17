@@ -273,27 +273,6 @@ Custom dataset recorders were built.
 
 ---
 
-# 🧪 6. Why tf-env Is Used?
-
-The project runs inside a virtual environment named `tf-env`.
-
-Why?
-
-Because it contains dependencies like:
-- MediaPipe
-- TensorFlow components
-- OpenCV
-- Django
-- NLTK
-
-Virtual environments prevent:
-- Version conflicts
-- Global Python issues
-- Dependency mismatches
-
-Even though we do not directly train with TensorFlow, MediaPipe internally depends on TensorFlow-related components.
-
----
 
 # 🛠 7. Technologies Used
 
@@ -485,3 +464,9 @@ Academic Project – Educational Use Only
 
 Final Year AI-Based Communication System Project
 
+
+
+
+# Changes i made
+i changed the versions in requirements.txt to match my python version of 3.12.3
+- changed in numpy,opencv,mediapipe,protobuf,tensorflow
