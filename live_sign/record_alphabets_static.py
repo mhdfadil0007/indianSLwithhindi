@@ -9,7 +9,7 @@ ALPHABETS = [
     "N","O","P","Q","R","S","T","U","V","W","X","Y","Z"
 ]
 
-SAMPLES_PER_LETTER = 30     
+SAMPLES_PER_LETTER = 50     
 DATA_DIR = "live_sign/data_alphabets_static"
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -21,7 +21,7 @@ mp_draw = mp.solutions.drawing_utils
 hands = mp_hands.Hands(
     static_image_mode=True,   
     max_num_hands=1,
-    min_detection_confidence=0.7
+    min_detection_confidence=0.5
 )
 
 cap = cv2.VideoCapture(0)
@@ -69,7 +69,7 @@ while True:
             y.append(current_letter)
             sample_count += 1
             print(f"{current_letter} sample {sample_count} saved")
-            time.sleep(0.4)
+            time.sleep(0.2)
 
     if sample_count == SAMPLES_PER_LETTER:
         sample_count = 0

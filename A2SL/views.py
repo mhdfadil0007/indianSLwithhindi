@@ -37,7 +37,14 @@ MODEL_PATH = os.path.join(
     "alphabet_model.pkl"
 )
 
+LABEL_PATH = os.path.join(
+    BASE_DIR,
+    "live_sign",
+    "alphabet_labels.pkl"
+)
+
 alphabet_model = joblib.load(MODEL_PATH)
+label_encoder = joblib.load(LABEL_PATH)
 
 # ======================================================
 # MEDIAPIPE HANDS (63 FEATURES)
@@ -47,8 +54,8 @@ mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
     static_image_mode=False,
     max_num_hands=1,
-    min_detection_confidence=0.6,
-    min_tracking_confidence=0.6
+    min_detection_confidence=0.4,
+    min_tracking_confidence=0.4
 )
 
 
@@ -247,6 +254,7 @@ def receive_frame(request):
 
         # ---------- 7. Predict ----------
         pred = alphabet_model.predict(X)[0]
+        pred_letter = label_encoder.inverse_transform([int(pred)])[0]#convert number into alphabet
 
         if hasattr(alphabet_model, "predict_proba"):
             conf = float(np.max(alphabet_model.predict_proba(X)))
@@ -255,7 +263,7 @@ def receive_frame(request):
 
         # ---------- 8. Return SAFE JSON ----------
         return JsonResponse({
-            "label": int(pred),
+            "label": pred_letter,
             "confidence": float(conf)
         })
 

@@ -471,3 +471,7 @@ Final Year AI-Based Communication System Project
 i changed the versions in requirements.txt to match my python version of 3.12.3
 - changed in numpy,opencv,mediapipe,protobuf,tensorflow
 - also added scikit-learn in requirements.txt
+- i trained the model first by increasing the samples_per_letter to 50 from 30, reduced min_detection_confidence to 0.5 from 0.7, and reduced time.sleep from 0.4 to 0.2(in record_alphabet_static.py folder)
+- but it was only showing number 25 in the detected sign instead of a value, even if new signs were shown(in live detection)
+- this was because the value was not been converted to alphabet, and the number was straight introduced. and 25 was the letter 'z'
+- even when i fixed it, the accuracy was off
