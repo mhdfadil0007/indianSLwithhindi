@@ -46,16 +46,17 @@ LABEL_PATH = os.path.join(
 alphabet_model = joblib.load(MODEL_PATH)
 label_encoder = joblib.load(LABEL_PATH)
 
+print("MODEL LOADED FROM:", MODEL_PATH)
+
 # ======================================================
 # MEDIAPIPE HANDS (63 FEATURES)
 # ======================================================
 
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
-    static_image_mode=False,
+    static_image_mode=True,
     max_num_hands=1,
-    min_detection_confidence=0.4,
-    min_tracking_confidence=0.4
+    min_detection_confidence=0.5
 )
 
 
@@ -225,10 +226,13 @@ def receive_frame(request):
                 "confidence": 0.0
             })
 
-        # ---------- 4. Convert to RGB ----------
+        # ---------- 4. Mirror flip to match training ----------
+        img = cv2.flip(img, 1)
+
+        # ---------- 5. Convert to RGB ----------
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        # ---------- 5. MediaPipe Hands ----------
+        # ---------- 6. MediaPipe Hands ----------
         results = hands.process(img_rgb)
 
         if not results.multi_hand_landmarks:
@@ -237,7 +241,7 @@ def receive_frame(request):
                 "confidence": 0.0
             })
 
-        # ---------- 6. Extract 63 features ----------
+        # ---------- 7. Extract 63 features ----------
         hand_landmarks = results.multi_hand_landmarks[0]
         features = []
 
@@ -252,7 +256,13 @@ def receive_frame(request):
 
         X = np.array(features).reshape(1, -1)
 
-        # ---------- 7. Predict ----------
+        print("X min:", np.min(X))
+        print("X max:", np.max(X))
+        print("X mean:", np.mean(X))
+        print("First 5 features:", X[0][:5])
+
+
+        # ---------- 8. Predict ----------
         pred = alphabet_model.predict(X)[0]
         pred_letter = label_encoder.inverse_transform([int(pred)])[0]#convert number into alphabet
 
@@ -261,7 +271,7 @@ def receive_frame(request):
         else:
             conf = 1.0
 
-        # ---------- 8. Return SAFE JSON ----------
+        # ---------- 9. Return SAFE JSON ----------
         return JsonResponse({
             "label": pred_letter,
             "confidence": float(conf)

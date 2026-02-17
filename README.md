@@ -475,3 +475,7 @@ i changed the versions in requirements.txt to match my python version of 3.12.3
 - but it was only showing number 25 in the detected sign instead of a value, even if new signs were shown(in live detection)
 - this was because the value was not been converted to alphabet, and the number was straight introduced. and 25 was the letter 'z'
 - even when i fixed it, the accuracy was off
+- the model was broken, only 3.85 percent accuracy on training data itself
+- so i retrained the model again, but the accuracy only pumped to 40 percent
+- so i tried data augmentation(which means to add horizontally flipped versions of each sample) and also added probabiity=True for proper confidence scores(on train_alphabets_static.py)
+- this increased the accuracy to 90 percent, but still some letters were not accurate
