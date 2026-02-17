@@ -68,12 +68,16 @@
            style="min-height:60px; background:#F1EFEC;
                   padding:10px; border-radius:8px;">
       </div>
+      <div style="text-align:center; margin-top:10px;">
+        <button class="submit" onclick="clearSentence()">Clear</button>
+        <button class="submit" onclick="saveToHistory()" style="margin-left:10px;">Save to History</button>
+      </div>
     </div>
 
     <div style="margin-top:20px;">
       <h3>History</h3>
       <ul id="history"
-          style="background:#F1EFEC; padding:10px; border-radius:8px; list-style:none;">
+          style="background:#F1EFEC; padding:10px; border-radius:8px; list-style:none; max-height:200px; overflow-y:auto;">
       </ul>
     </div>
 
@@ -88,6 +92,124 @@ const ctx = canvas.getContext("2d");
 
 let stream = null;
 let sendInterval = null;
+
+/* ===== SENTENCE FORMATION ===== */
+let currentSentence = "";
+let lastDetectionTime = null;
+let lastDetectedLetter = null;
+const PAUSE_THRESHOLD = 2000; // 2 seconds = word break
+const CONFIDENCE_THRESHOLD = 0.5; // 50% minimum confidence
+
+/* ===== HISTORY MANAGEMENT ===== */
+function loadHistory() {
+    const saved = localStorage.getItem("signHistory");
+    return saved ? JSON.parse(saved) : [];
+}
+
+function saveHistory(history) {
+    localStorage.setItem("signHistory", JSON.stringify(history));
+}
+
+function renderHistory() {
+    const history = loadHistory();
+    const historyEl = document.getElementById("history");
+    historyEl.innerHTML = "";
+    
+    history.forEach((item, index) => {
+        const li = document.createElement("li");
+        li.style.marginBottom = "8px";
+        li.style.paddingBottom = "8px";
+        li.style.borderBottom = "1px solid #ddd";
+        li.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <span style="color:#666; font-size:12px;">${item.time}</span>
+                    <br>
+                    <strong>${item.text}</strong>
+                </div>
+                <button onclick="deleteHistoryItem(${index})" style="background:#ff4444; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Delete</button>
+            </div>
+        `;
+        historyEl.appendChild(li);
+    });
+}
+
+function saveToHistory() {
+    if (currentSentence.trim() === "") {
+        alert("No sentence to save!");
+        return;
+    }
+    
+    const history = loadHistory();
+    const now = new Date();
+    const timeStr = now.toLocaleDateString() + " " + now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    
+    history.unshift({ text: currentSentence.trim(), time: timeStr });
+    saveHistory(history);
+    renderHistory();
+    
+    currentSentence = "";
+    lastDetectedLetter = null;
+    lastDetectionTime = null;
+    document.getElementById("sentenceBox").innerText = "";
+    document.getElementById("detectedSign").innerText = "—";
+    document.getElementById("confidenceBar").style.width = "0%";
+    document.getElementById("confidenceBar").innerText = "0%";
+}
+
+function deleteHistoryItem(index) {
+    const history = loadHistory();
+    history.splice(index, 1);
+    saveHistory(history);
+    renderHistory();
+}
+
+function clearSentence() {
+    currentSentence = "";
+    lastDetectedLetter = null;
+    lastDetectionTime = null;
+    document.getElementById("sentenceBox").innerText = "";
+    document.getElementById("detectedSign").innerText = "—";
+    document.getElementById("confidenceBar").style.width = "0%";
+    document.getElementById("confidenceBar").innerText = "0%";
+}
+
+function processDetection(letter, confidence) {
+    const now = Date.now();
+    
+    // Skip low confidence detections
+    if (confidence < CONFIDENCE_THRESHOLD) {
+        return;
+    }
+    
+    // Skip placeholder
+    if (letter === "-" || letter === "") {
+        return;
+    }
+    
+    // Check for pause (word break)
+    if (lastDetectionTime && (now - lastDetectionTime) > PAUSE_THRESHOLD) {
+        // Add space if last char wasn't a space
+        if (currentSentence.length > 0 && !currentSentence.endsWith(" ")) {
+            currentSentence += " ";
+        }
+    }
+    
+    // Skip consecutive duplicates
+    if (lastDetectedLetter === letter && currentSentence.endsWith(letter)) {
+        // Still update the time
+        lastDetectionTime = now;
+        return;
+    }
+    
+    // Add letter to sentence
+    currentSentence += letter;
+    lastDetectedLetter = letter;
+    lastDetectionTime = now;
+    
+    // Update UI
+    document.getElementById("sentenceBox").innerText = currentSentence;
+}
 
 /* ===== START CAMERA ===== */
 async function startCamera() {
@@ -149,10 +271,18 @@ async function sendFrame() {
             const bar = document.getElementById("confidenceBar");
             bar.style.width = conf + "%";
             bar.innerText = conf + "%";
+            
+            // Process letter for sentence formation
+            processDetection(data.label, data.confidence);
         }
     } catch (e) {
         console.warn("Frame send failed");
     }
 }
+
+/* ===== INIT ===== */
+document.addEventListener("DOMContentLoaded", function() {
+    renderHistory();
+});
 </script>
 {% endblock %}
