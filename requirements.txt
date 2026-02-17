@@ -6,11 +6,10 @@ nltk>=3.7
 regex>=2022.10.31
 sqlparse>=0.4.4
 tqdm>=4.64.1
-setuptools>=67.8.0
+scikit-learn>=1.0
 numpy>=1.26.0
 opencv-python>=4.8.0
 gTTS
 googletrans==4.0.0-rc1
-mediapipe>=0.10.0
-protobuf>=3.20.0
-tensorflow>=2.15.0
+mediapipe==0.10.13
+protobuf<5

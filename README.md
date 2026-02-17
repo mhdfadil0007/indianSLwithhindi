@@ -469,4 +469,5 @@ Final Year AI-Based Communication System Project
 
 # Changes i made
 i changed the versions in requirements.txt to match my python version of 3.12.3
-- changed in numpy,opencv,mediapipe,protobuf,tensorflo
+- changed in numpy,opencv,mediapipe,protobuf,tensorflow
+- also added scikit-learn in requirements.txt
