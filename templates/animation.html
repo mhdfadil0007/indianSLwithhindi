@@ -1,0 +1,478 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="split left">
+    <h2 align="center">Enter Text or Use Mic</h2>
+    <br>
+    <form action="" method="post" align="left">
+        {% csrf_token %}
+        <input type="text" name="sen" class="mytext" id="speechToText" placeholder="Type or speak here...">
+        <button type="button" name="button" class="mic" onclick="record()"><img src="{% static 'mic3.png' %}" height="32px" width="38px" /></button>
+          
+        <select name="language" id="language" style="height: 42px; vertical-align: top;">
+            <option value="en">English</option>
+            <option value="hi">Hindi</option>
+        </select>
+          
+        <input type="submit" name="submit" class="submit">
+    </form>
+    <br>
+    
+    <!-- Spectrogram section -->
+    <div class="spectrogram-section">
+        <h3>Spectrogram</h3>
+        <canvas id="spectrogramCanvas" width="600" height="100" style="border: 1px solid #3498db;"></canvas>
+    </div>
+    <br>
+    
+    <table cellspacing="20px">
+        <tr>
+            <td class="td">The text that you entered is:</td>
+            <td class="td">{{ text }}</td>
+        </tr>
+        {% if translated_text and language == 'hi' %}
+        <tr class="translation-row">
+            <td class="td">Translated to English:</td>
+            <td class="td">{{ translated_text|capfirst }}</td>
+        </tr>
+        {% endif %}
+        <tr>
+            <td class="td">Key words for animation:</td>
+            <td class="td">
+                <ul class="td" id="list" align="center">
+                    {% for word in words %}
+                    <li id="{{ forloop.counter0 }}" style="margin-right: 8px">{{ word }}</li>
+                    {% endfor %}
+                </ul>
+            </td>
+        </tr>
+    </table>
+    
+    {% if audio %}
+    <br>
+    <div class="audio-container">
+        <audio controls>
+            <source src="{{ audio }}" type="audio/mp3">
+            Your browser does not support the audio tag.
+        </audio>
+    </div>
+    {% endif %}
+</div>
+
+<div class="split right">
+    <h2 align="center">Sign Language Animation</h2>
+    <div style="text-align:center">
+        <button class="submit play-button" onclick="playPause()">Play/Pause</button>
+        <video id="videoPlayer" width="600" height="350" preload="auto" autoplay>
+            <source src="" type="video/mp4">
+            Your browser does not support HTML5 video.
+        </video>
+    </div>
+<div class="translation-output" style="margin-top:20px;">
+    <h3>English</h3>
+  <p id="englishText" style="font-size:18px;"></p>
+
+    <h3>Hindi</h3>
+  <p id="hindiText" style="font-size:18px;"></p>
+</div>
+  
+</div>
+
+<style>
+/* Modern styling for layout and elements */
+* {
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+h2, h3 {
+    color: #030303;
+    font-weight: 600;
+}
+
+.split {
+    height: 100%;
+    position: relative;
+    padding: 25px;
+    overflow: auto;
+}
+
+.left {
+    width: 50%;
+    float: left;
+    border-right: 1px solid #D4C9BE;
+    background-color: #F1EFEC;
+}
+
+.right {
+    width: 50%;
+    float: right;
+    background-color: #F1EFEC;
+    display: flex;
+    flex-direction: column;
+    padding: 25px;
+}
+.right h2 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+form {
+    margin-bottom: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.mytext {
+    height: 42px;
+    padding: 0 15px;
+    border: 1px solid #D4C9BE;
+    border-radius: 6px;
+    width: 60%;
+    font-size: 16px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+.mytext:focus {
+    outline: none;
+    border-color: #D4C9BE;
+    box-shadow: 0 2px 8px rgba(212, 201, 190, 0.3);
+}
+
+.mic {
+    background-color: #D4C9BE;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    vertical-align: top;
+    height: 42px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.mic:hover {
+    background-color: #c4b7a9;
+    transform: translateY(-2px);
+}
+
+.mic:active {
+    transform: translateY(0);
+}
+
+#language {
+    height: 42px;
+    padding: 0 10px;
+    border: 1px solid #D4C9BE;
+    border-radius: 6px;
+    margin: 0 5px;
+    background-color: white;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    cursor: pointer;
+}
+
+.submit {
+    background-color: #030303;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.submit:hover {
+    background-color: #333333;
+    transform: translateY(-2px);
+}
+
+.submit:active {
+    transform: translateY(0);
+}
+
+.play-button {
+    margin-bottom: 15px;
+    font-size: 16px;
+}
+
+.spectrogram-section {
+    margin: 15px 0;
+    padding: 15px;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+#spectrogramCanvas {
+    width: 100%;
+    max-width: 600px;
+    border: 1px solid #D4C9BE;
+    border-radius: 8px;
+    background-color: #F1EFEC;
+}
+
+table {
+    width: 100%;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    padding: 10px;
+}
+
+.td {
+    padding: 12px;
+    color: #030303;
+}
+
+#list {
+    display: flex;
+    flex-wrap: wrap;
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+    justify-content: flex-start;
+}
+
+#list li {
+    background-color: #D4C9BE;
+    color: #030303;
+    padding: 8px 15px;
+    margin: 5px;
+    border-radius: 20px;
+    transition: all 0.3s ease;
+    font-weight: 500;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+#list li:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.audio-container {
+    margin-top: 20px;
+    text-align: left;
+    background-color: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+audio {
+    width: 100%;
+    border-radius: 30px;
+}
+
+#videoPlayer {
+    width: 100%;
+    max-height: calc(100vh - 200px);
+    object-fit: contain;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+}
+
+
+.translation-row td {
+    background-color: #ffffff;
+    padding: 12px;
+    border-radius: 6px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.translation-row .td {
+    color: #030303;
+    font-weight: 500;
+}
+
+
+@media (max-width: 768px) {
+    table {
+        display: block;
+        overflow-x: auto;
+    }
+    .td {
+        font-size: 16px;
+        padding: 8px;
+    }
+    #list li {
+        margin: 3px;
+        padding: 6px 10px;
+    }
+}
+</style>
+
+<script>
+    
+    const SIGN_DICTIONARY = {
+        hello: { en: "hello", hi: "नमस्ते" },
+        how:   { en: "how",   hi: "कैसे" },
+        are:   { en: "are",   hi: "हैं" },
+        you:   { en: "you",   hi: "आप" }
+    };
+
+    
+    let playedSigns = [];
+    
+    let audioContext, analyser, source, animationId;
+
+    function record() {
+        var recognition = new webkitSpeechRecognition();
+        var lang = document.getElementById('language').value;
+        recognition.lang = lang === 'hi' ? 'hi-IN' : 'en-IN';
+
+        
+        startSpectrogram();
+
+        recognition.onresult = function(event) {
+            console.log(event);
+            document.getElementById('speechToText').value = event.results[0][0].transcript;
+            stopSpectrogram();
+        };
+
+        recognition.onend = function() {
+            stopSpectrogram();
+        };
+
+        recognition.onerror = function(event) {
+            console.error('Speech recognition error:', event.error);
+            stopSpectrogram();
+        };
+
+        recognition.start();
+    }
+
+function play() {
+
+    
+    playedSigns = [];   
+
+    var videos = document.getElementById("list").getElementsByTagName("li");
+    for (var k = 0; k < videos.length; k++) {
+        playedSigns.push(videos[k].innerHTML.trim());
+    }
+
+    
+    var videoSource = new Array();
+    for (var j = 0; j < videos.length; j++) {
+        videoSource[j] = "/static/" + videos[j].innerHTML + ".mp4";
+    }
+
+    var i = 0;
+    var videoCount = videoSource.length;
+
+    function videoPlay(videoNum) {
+        document.getElementById("list").getElementsByTagName("li")[videoNum].style.color = "#09edc7";
+        document.getElementById("list").getElementsByTagName("li")[videoNum].style.fontSize = "xx-large";
+        document.getElementById("videoPlayer").setAttribute("src", videoSource[videoNum]);
+        document.getElementById("videoPlayer").load();
+        document.getElementById("videoPlayer").play();
+    }
+
+    document.getElementById('videoPlayer').addEventListener('ended', myHandler, false);
+
+    if (videoCount > 0) {
+        document.getElementById("list").getElementsByTagName("li")[0].style.color = "#09edc7";
+        document.getElementById("list").getElementsByTagName("li")[0].style.fontSize = "xx-large";
+        videoPlay(0);
+    }
+
+    function myHandler() {
+        document.getElementById("list").getElementsByTagName("li")[i].style.color = "#feda6a";
+        document.getElementById("list").getElementsByTagName("li")[i].style.fontSize = "20px";
+        i++;
+        if (i == videoCount) {
+            document.getElementById("videoPlayer").pause();
+        } else {
+            videoPlay(i);
+        }
+    }
+}
+
+function playPause() {
+    if (document.getElementById("videoPlayer").paused) {
+        play();
+        updateTextOutput();  
+    } else {
+        document.getElementById("videoPlayer").pause();
+    }
+}
+
+
+function updateTextOutput() {
+    let englishWords = [];
+    let hindiWords = [];
+
+    for (let i = 0; i < playedSigns.length; i++) {
+        let key = playedSigns[i];
+
+        if (SIGN_DICTIONARY[key]) {
+            englishWords.push(SIGN_DICTIONARY[key].en);
+            hindiWords.push(SIGN_DICTIONARY[key].hi);
+        }
+    }
+
+    document.getElementById("englishText").innerText = englishWords.join(" ");
+    document.getElementById("hindiText").innerText = hindiWords.join(" ");
+}
+
+
+    
+    function startSpectrogram() {
+        if (!audioContext) {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            const canvas = document.getElementById('spectrogramCanvas');
+            const ctx = canvas.getContext('2d');
+
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    source = audioContext.createMediaStreamSource(stream);
+                    source.connect(analyser);
+
+                    function drawSpectrogram() {
+                        animationId = requestAnimationFrame(drawSpectrogram);
+                        analyser.getByteFrequencyData(dataArray);
+
+                        ctx.fillStyle = '#ecf0f1';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                        const barWidth = canvas.width / bufferLength;
+                        for (let i = 0; i < bufferLength; i++) {
+                            const barHeight = dataArray[i] * (canvas.height / 255);
+                            ctx.fillStyle = '#3498db';
+                            ctx.fillRect(i * barWidth, canvas.height - barHeight, barWidth - 1, barHeight);
+                        }
+                    }
+
+                    drawSpectrogram();
+                })
+                .catch(err => console.error('Error accessing microphone:', err));
+        }
+    }
+
+    function stopSpectrogram() {
+        if (audioContext && source) {
+            source.disconnect();
+            audioContext.close();
+            cancelAnimationFrame(animationId);
+            audioContext = null;
+            source = null;
+            analyser = null;
+            const canvas = document.getElementById('spectrogramCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ecf0f1';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+    }
+</script>
+{% endblock %}
