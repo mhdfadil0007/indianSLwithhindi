@@ -37,7 +37,16 @@ MODEL_PATH = os.path.join(
     "alphabet_model.pkl"
 )
 
+LABEL_PATH = os.path.join(
+    BASE_DIR,
+    "live_sign",
+    "alphabet_labels.pkl"
+)
+
 alphabet_model = joblib.load(MODEL_PATH)
+label_encoder = joblib.load(LABEL_PATH)
+
+print("MODEL LOADED FROM:", MODEL_PATH)
 
 # ======================================================
 # MEDIAPIPE HANDS (63 FEATURES)
@@ -45,16 +54,15 @@ alphabet_model = joblib.load(MODEL_PATH)
 
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
-    static_image_mode=False,
+    static_image_mode=True,
     max_num_hands=1,
-    min_detection_confidence=0.6,
-    min_tracking_confidence=0.6
+    min_detection_confidence=0.5
 )
 
 
 def extract_hand_features(img):
     """
-    Returns (1, 63) numpy array or None
+    Returns (1, N) numpy array with enhanced features
     """
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     result = hands.process(img_rgb)
@@ -63,10 +71,41 @@ def extract_hand_features(img):
         return None
 
     landmarks = result.multi_hand_landmarks[0].landmark
+    
     features = []
-
+    
+    wrist = np.array([landmarks[0].x, landmarks[0].y, landmarks[0].z])
+    
     for lm in landmarks:
-        features.extend([lm.x, lm.y, lm.z])
+        features.extend([lm.x - wrist[0], lm.y - wrist[1], lm.z - wrist[2]])
+    
+    fingertips = [4, 8, 12, 16, 20]
+    finger_bases = [2, 5, 9, 13, 17]
+    finger_mids = [6, 10, 14, 18]
+    
+    for i in range(5):
+        tip = np.array([landmarks[fingertips[i]].x, landmarks[fingertips[i]].y, landmarks[fingertips[i]].z])
+        base = np.array([landmarks[finger_bases[i]].x, landmarks[finger_bases[i]].y, landmarks[finger_bases[i]].z])
+        dist = np.linalg.norm(tip - base)
+        features.append(dist)
+    
+    for i in range(5):
+        for j in range(i + 1, 5):
+            p1 = np.array([landmarks[fingertips[i]].x, landmarks[fingertips[i]].y])
+            p2 = np.array([landmarks[fingertips[j]].x, landmarks[fingertips[j]].y])
+            dist = np.linalg.norm(p1 - p2)
+            features.append(dist)
+    
+    for i, tip_idx in enumerate(fingertips):
+        if i < len(finger_mids):
+            tip = np.array([landmarks[tip_idx].x, landmarks[tip_idx].y])
+            mid = np.array([landmarks[finger_mids[i]].x, landmarks[finger_mids[i]].y])
+            base = np.array([landmarks[finger_bases[i]].x, landmarks[finger_bases[i]].y])
+            
+            v1 = tip - mid
+            v2 = base - mid
+            angle = np.arccos(np.clip(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-6), -1, 1))
+            features.append(angle)
 
     return np.array(features).reshape(1, -1)
 
@@ -218,10 +257,13 @@ def receive_frame(request):
                 "confidence": 0.0
             })
 
-        # ---------- 4. Convert to RGB ----------
+        # ---------- 4. Mirror flip to match training ----------
+        img = cv2.flip(img, 1)
+
+        # ---------- 5. Convert to RGB ----------
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        # ---------- 5. MediaPipe Hands ----------
+        # ---------- 6. MediaPipe Hands ----------
         results = hands.process(img_rgb)
 
         if not results.multi_hand_landmarks:
@@ -230,32 +272,33 @@ def receive_frame(request):
                 "confidence": 0.0
             })
 
-        # ---------- 6. Extract 63 features ----------
-        hand_landmarks = results.multi_hand_landmarks[0]
-        features = []
+        # ---------- 7. Extract enhanced features ----------
+        X = extract_hand_features(img)
 
-        for lm in hand_landmarks.landmark:
-            features.extend([lm.x, lm.y, lm.z])
-
-        if len(features) != 63:
+        if X is None or X.shape[1] == 0:
             return JsonResponse({
                 "label": "-",
                 "confidence": 0.0
             })
 
-        X = np.array(features).reshape(1, -1)
+        print("Features shape:", X.shape)
+        print("X min:", np.min(X))
+        print("X max:", np.max(X))
+        print("X mean:", np.mean(X))
 
-        # ---------- 7. Predict ----------
+
+        # ---------- 8. Predict ----------
         pred = alphabet_model.predict(X)[0]
+        pred_letter = label_encoder.inverse_transform([int(pred)])[0]#convert number into alphabet
 
         if hasattr(alphabet_model, "predict_proba"):
             conf = float(np.max(alphabet_model.predict_proba(X)))
         else:
             conf = 1.0
 
-        # ---------- 8. Return SAFE JSON ----------
+        # ---------- 9. Return SAFE JSON ----------
         return JsonResponse({
-            "label": int(pred),
+            "label": pred_letter,
             "confidence": float(conf)
         })
 

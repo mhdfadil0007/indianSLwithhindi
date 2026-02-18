@@ -273,27 +273,6 @@ Custom dataset recorders were built.
 
 ---
 
-# 🧪 6. Why tf-env Is Used?
-
-The project runs inside a virtual environment named `tf-env`.
-
-Why?
-
-Because it contains dependencies like:
-- MediaPipe
-- TensorFlow components
-- OpenCV
-- Django
-- NLTK
-
-Virtual environments prevent:
-- Version conflicts
-- Global Python issues
-- Dependency mismatches
-
-Even though we do not directly train with TensorFlow, MediaPipe internally depends on TensorFlow-related components.
-
----
 
 # 🛠 7. Technologies Used
 
@@ -485,3 +464,19 @@ Academic Project – Educational Use Only
 
 Final Year AI-Based Communication System Project
 
+
+
+
+# Changes i made
+i changed the versions in requirements.txt to match my python version of 3.12.3
+- changed in numpy,opencv,mediapipe,protobuf,tensorflow
+- also added scikit-learn in requirements.txt
+- i trained the model first by increasing the samples_per_letter to 50 from 30, reduced min_detection_confidence to 0.5 from 0.7, and reduced time.sleep from 0.4 to 0.2(in record_alphabet_static.py folder)
+- but it was only showing number 25 in the detected sign instead of a value, even if new signs were shown(in live detection)
+- this was because the value was not been converted to alphabet, and the number was straight introduced. and 25 was the letter 'z'
+- even when i fixed it, the accuracy was off
+- the model was broken, only 3.85 percent accuracy on training data itself
+- so i retrained the model again, but the accuracy only pumped to 40 percent
+- so i tried data augmentation(which means to add horizontally flipped versions of each sample) and also added probabiity=True for proper confidence scores(on train_alphabets_static.py)
+- this increased the accuracy to 90 percent, but still some letters were not accurate
+- so i added feature extraction to it and retrained the data again
