@@ -479,3 +479,17 @@ i changed the versions in requirements.txt to match my python version of 3.12.3
 - so i tried data augmentation(which means to add horizontally flipped versions of each sample) and also added probabiity=True for proper confidence scores(on train_alphabets_static.py)
 - this increased the accuracy to 90 percent, but still some letters were not accurate
 - so i added feature extraction to it and retrained the data again
+
+# changes i made after the previous changes
+- This is based for live detection model
+- model was trained on asl, but the model needs to be trained in isl data. so changed the max_num_hands = 2 instead of 1 in record_alpabets_static.py
+- the earlier model was trained on static alphabetic model(static_image_mode= true), but isl requires motion, so we change from training one frame to training 12 consecutive frames(sequential frames)
+- for the model, we used flatten + SVM(similar to words)
+- removed record_alphabets_static.py and train_alphabets_static.py and created new record and train sequence.py file(since the static was based on asl and was trained on static data)
+- this time, i only focused on feature extraction first, and based on the accuracy, will check whether to add data augmentation or not
+- also updates code in a2sl/ views.py
+- i was met with an issue where the whole recording process was taking around 20 mins, which was very long
+- this was because each frame(total of 50 frames for each letter) had a 15 frame stability to be processed, which was taking a lot of time(eg: 15 stability for 1 frame of letter 'a', till 50 frames )
+- so i went with an option of reducing to 20 samples per letter and removed stability requirement(since letters now require motion), thereby reducing the time to 5-6 minutes for training
+
+- i came back to the static data itself instead of sequential data, and the views.py(earlier updated for sequence mode) was reverted back to static mode for live detection

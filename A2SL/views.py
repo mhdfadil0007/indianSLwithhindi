@@ -49,7 +49,7 @@ label_encoder = joblib.load(LABEL_PATH)
 print("MODEL LOADED FROM:", MODEL_PATH)
 
 # ======================================================
-# MEDIAPIPE HANDS (63 FEATURES)
+# MEDIAPIPE HANDS (STATIC MODE - 82 FEATURES)
 # ======================================================
 
 mp_hands = mp.solutions.hands
@@ -60,18 +60,7 @@ hands = mp_hands.Hands(
 )
 
 
-def extract_hand_features(img):
-    """
-    Returns (1, N) numpy array with enhanced features
-    """
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    result = hands.process(img_rgb)
-
-    if not result.multi_hand_landmarks:
-        return None
-
-    landmarks = result.multi_hand_landmarks[0].landmark
-    
+def extract_hand_features(landmarks):
     features = []
     
     wrist = np.array([landmarks[0].x, landmarks[0].y, landmarks[0].z])
@@ -106,7 +95,7 @@ def extract_hand_features(img):
             v2 = base - mid
             angle = np.arccos(np.clip(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-6), -1, 1))
             features.append(angle)
-
+    
     return np.array(features).reshape(1, -1)
 
 
@@ -225,7 +214,7 @@ def live_detect_view(request):
 
 
 # ======================================================
-# RECEIVE FRAME + PREDICT (FINAL & FIXED)
+# RECEIVE FRAME + PREDICT (STATIC MODE)
 # ======================================================
 @csrf_exempt
 def receive_frame(request):
@@ -236,19 +225,16 @@ def receive_frame(request):
         data = json.loads(request.body)
         frame = data.get("frame", "")
 
-        # ---------- 1. Validate frame ----------
         if not frame or "," not in frame:
             return JsonResponse({
                 "label": "-",
                 "confidence": 0.0
             })
 
-        # ---------- 2. Decode base64 ----------
         header, encoded = frame.split(",", 1)
         img_bytes = base64.b64decode(encoded)
         np_arr = np.frombuffer(img_bytes, np.uint8)
 
-        # ---------- 3. Decode image ----------
         img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
         if img is None or img.size == 0:
@@ -257,13 +243,9 @@ def receive_frame(request):
                 "confidence": 0.0
             })
 
-        # ---------- 4. Mirror flip to match training ----------
         img = cv2.flip(img, 1)
-
-        # ---------- 5. Convert to RGB ----------
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        # ---------- 6. MediaPipe Hands ----------
         results = hands.process(img_rgb)
 
         if not results.multi_hand_landmarks:
@@ -272,8 +254,8 @@ def receive_frame(request):
                 "confidence": 0.0
             })
 
-        # ---------- 7. Extract enhanced features ----------
-        X = extract_hand_features(img)
+        landmarks = results.multi_hand_landmarks[0].landmark
+        X = extract_hand_features(landmarks)
 
         if X is None or X.shape[1] == 0:
             return JsonResponse({
@@ -281,22 +263,14 @@ def receive_frame(request):
                 "confidence": 0.0
             })
 
-        print("Features shape:", X.shape)
-        print("X min:", np.min(X))
-        print("X max:", np.max(X))
-        print("X mean:", np.mean(X))
-
-
-        # ---------- 8. Predict ----------
         pred = alphabet_model.predict(X)[0]
-        pred_letter = label_encoder.inverse_transform([int(pred)])[0]#convert number into alphabet
+        pred_letter = label_encoder.inverse_transform([int(pred)])[0]
 
         if hasattr(alphabet_model, "predict_proba"):
             conf = float(np.max(alphabet_model.predict_proba(X)))
         else:
             conf = 1.0
 
-        # ---------- 9. Return SAFE JSON ----------
         return JsonResponse({
             "label": pred_letter,
             "confidence": float(conf)
@@ -308,3 +282,8 @@ def receive_frame(request):
             "label": "-",
             "confidence": 0.0
         })
+
+
+@csrf_exempt
+def reset_prediction(request):
+    return JsonResponse({"status": "reset"})
