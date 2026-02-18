@@ -378,8 +378,7 @@ Static frame cannot capture temporal patterns.
 
 # ⚙ 10. Installation & Setup
 
-## Step 1: Clone Repository
-
+## Step 1: Clone Repositor
 ```bash
 git clone <repository-link>
 cd project-folder
