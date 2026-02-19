@@ -130,15 +130,17 @@ def extract_hand_features(landmarks):
 
 
 def extract_word_frame_features(landmarks_list):
-    """Extract 126 features from hand landmarks (for word detection with 2 hands)"""
+    """Extract 126 wrist-normalized features from hand landmarks (for word detection with 2 hands)"""
     features = []
     
     if len(landmarks_list) == 0:
         return [0.0] * VALUES_PER_FRAME
     
     for hand_landmarks in landmarks_list:
+        wrist = np.array([hand_landmarks.landmark[0].x, hand_landmarks.landmark[0].y, hand_landmarks.landmark[0].z])
+        
         for lm in hand_landmarks.landmark:
-            features.extend([lm.x, lm.y, lm.z])
+            features.extend([lm.x - wrist[0], lm.y - wrist[1], lm.z - wrist[2]])
     
     if len(landmarks_list) == 1:
         features.extend([0.0] * 63)

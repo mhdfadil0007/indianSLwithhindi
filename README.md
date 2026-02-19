@@ -504,3 +504,7 @@ i changed the versions in requirements.txt to match my python version of 3.12.3
 - this was due to aggressive buffer clearing, where after prediction the buffer is cleared immediately
 - so inorder to fix that, sliding window logic is introduced and word_frame_buffer.clear()is removed(code in views.py)
 - still the error is formed,so we changed views.py to event based prediction
+- the whole process was completed, but the accuracy for predicting words was very low(and only worked on stable and not motion movements)
+- so changed again in records and views.py to incorporate wrist normalization similar to alphabets
+- again faced an error, recording didnt pick up. This was wrist = np.array([hand_landmarks[0]]) need to use .landmark[0] at the end
+- now model accuracy increased from 64.5 to 92.86
