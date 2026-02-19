@@ -83,12 +83,11 @@ hands_word = mp_hands.Hands(
 
 FRAMES_PER_WORD = 12
 VALUES_PER_FRAME = 126
-WORD_PREDICTION_COOLDOWN = 3
-MAX_MISSED_FRAMES = 3
 
 word_frame_buffer = []
-word_prediction_count = 0
-word_missed_frames = 0
+word_state = "IDLE"
+word_last_prediction = "-"
+word_last_confidence = 0.0
 
 
 def extract_hand_features(landmarks):
@@ -268,7 +267,7 @@ current_detection_mode = {"mode": "alphabet"}
 
 @csrf_exempt
 def receive_frame(request):
-    global word_frame_buffer, word_prediction_count, word_missed_frames, current_detection_mode
+    global word_frame_buffer, word_state, word_last_prediction, word_last_confidence, current_detection_mode
     
     if request.method != "POST":
         return JsonResponse({"error": "Invalid method"}, status=405)
@@ -281,8 +280,9 @@ def receive_frame(request):
         if mode != current_detection_mode["mode"]:
             current_detection_mode["mode"] = mode
             word_frame_buffer = []
-            word_prediction_count = 0
-            word_missed_frames = 0
+            word_state = "IDLE"
+            word_last_prediction = "-"
+            word_last_confidence = 0.0
 
         if not frame or "," not in frame:
             return JsonResponse({
@@ -309,64 +309,78 @@ def receive_frame(request):
             results = hands_word.process(img_rgb)
             
             if not results.multi_hand_landmarks:
-                word_missed_frames += 1
-                if word_missed_frames > MAX_MISSED_FRAMES:
-                    word_frame_buffer.clear()
-                    word_prediction_count = 0
+                if word_state == "PREDICTED":
+                    word_state = "IDLE"
+                if word_state == "IDLE":
+                    return JsonResponse({
+                        "label": "-",
+                        "confidence": 0.0,
+                        "progress": 0
+                    })
+                word_frame_buffer.clear()
+                word_state = "IDLE"
                 return JsonResponse({
-                    "label": "-",
-                    "confidence": 0.0,
-                    "progress": len(word_frame_buffer)
+                    "label": word_last_prediction,
+                    "confidence": word_last_confidence,
+                    "is_word": True,
+                    "progress": 0
                 })
             
-            word_missed_frames = 0
+            if word_state == "IDLE":
+                word_state = "COLLECTING"
+                word_frame_buffer.clear()
             
-            frame_features = extract_word_frame_features(results.multi_hand_landmarks)
-            word_frame_buffer.append(frame_features)
+            if word_state == "COLLECTING":
+                frame_features = extract_word_frame_features(results.multi_hand_landmarks)
+                word_frame_buffer.append(frame_features)
+                
+                if len(word_frame_buffer) < FRAMES_PER_WORD:
+                    return JsonResponse({
+                        "label": "-",
+                        "confidence": 0.0,
+                        "progress": len(word_frame_buffer),
+                        "is_word": True
+                    })
+                
+                if len(word_frame_buffer) > FRAMES_PER_WORD:
+                    word_frame_buffer.pop(0)
+                
+                if len(word_frame_buffer) == FRAMES_PER_WORD:
+                    X = np.array(word_frame_buffer).flatten().reshape(1, -1)
+                    
+                    if X.shape[1] != 1512:
+                        return JsonResponse({
+                            "label": "-",
+                            "confidence": 0.0,
+                            "is_word": True
+                        })
+                    
+                    pred = word_model.predict(X)[0]
+                    pred_word = word_label_encoder.inverse_transform([int(pred)])[0]
+                    
+                    if hasattr(word_model, "predict_proba"):
+                        conf = float(np.max(word_model.predict_proba(X)))
+                    else:
+                        conf = 1.0
+                    
+                    word_last_prediction = pred_word
+                    word_last_confidence = conf
+                    word_state = "PREDICTED"
+                    
+                    return JsonResponse({
+                        "label": pred_word,
+                        "confidence": conf,
+                        "is_word": True,
+                        "progress": 12
+                    })
             
-            if len(word_frame_buffer) > FRAMES_PER_WORD:
-                word_frame_buffer.pop(0)
-            
-            if len(word_frame_buffer) < FRAMES_PER_WORD:
+            if word_state == "PREDICTED":
                 return JsonResponse({
-                    "label": "-",
-                    "confidence": 0.0,
-                    "progress": len(word_frame_buffer)
+                    "label": word_last_prediction,
+                    "confidence": word_last_confidence,
+                    "is_word": True,
+                    "progress": 12
                 })
-            
-            word_prediction_count += 1
-            
-            if word_prediction_count < WORD_PREDICTION_COOLDOWN:
-                return JsonResponse({
-                    "label": "-",
-                    "confidence": 0.0,
-                    "progress": len(word_frame_buffer)
-                })
-            
-            X = np.array(word_frame_buffer).flatten().reshape(1, -1)
-            
-            if X.shape[1] != 1512:
-                return JsonResponse({
-                    "label": "-",
-                    "confidence": 0.0
-                })
-            
-            pred = word_model.predict(X)[0]
-            pred_word = word_label_encoder.inverse_transform([int(pred)])[0]
-            
-            if hasattr(word_model, "predict_proba"):
-                conf = float(np.max(word_model.predict_proba(X)))
-            else:
-                conf = 1.0
-            
-            word_frame_buffer.clear()
-            word_prediction_count = 0
-            
-            return JsonResponse({
-                "label": pred_word,
-                "confidence": float(conf),
-                "is_word": True
-            })
         
         else:
             results = hands_static.process(img_rgb)

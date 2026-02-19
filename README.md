@@ -500,4 +500,7 @@ i changed the versions in requirements.txt to match my python version of 3.12.3
 - but the signs were not picked up in ui, this was because there was a mismatch during training and in views
 - training used raw landmark coordinated whereas in views, used wrist-normalized coordinates
 - so changed views and made it similar to training method and reduced min detection and tracking confidence to 0.7 from 0.5(reduction part in mediapipe)
-- still error was persistent
+- still error was persistent, the output was shown but it was clearing fast without waiting for another hand signal
+- this was due to aggressive buffer clearing, where after prediction the buffer is cleared immediately
+- so inorder to fix that, sliding window logic is introduced and word_frame_buffer.clear()is removed(code in views.py)
+- still the error is formed,so we changed views.py to event based prediction
