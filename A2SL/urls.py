@@ -13,6 +13,7 @@ urlpatterns = [
     path('', views.home_view, name='home'),
     path('live-detect/', views.live_detect_view, name='live_detect'),
     path("receive-frame/", views.receive_frame, name="receive_frame"),
+    path("reset-prediction/", views.reset_prediction, name="reset_prediction"),
 
 ]
 

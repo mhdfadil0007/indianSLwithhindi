@@ -9,6 +9,17 @@
 
     <h2 style="text-align:center;">Live Sign Detection</h2>
 
+    <!-- Mode Toggle -->
+    <div style="text-align:center; margin-top:10px;">
+      <label style="font-weight:bold; margin-right:10px;">Detection Mode:</label>
+      <label style="margin-right:15px;">
+        <input type="radio" name="detectionMode" value="alphabet" checked> Alphabets
+      </label>
+      <label>
+        <input type="radio" name="detectionMode" value="word"> Words
+      </label>
+    </div>
+
     <!-- Camera Preview -->
     <video
       id="camera"
@@ -30,6 +41,11 @@
     <!-- Status -->
     <p id="cameraStatus" style="text-align:center; margin-top:10px; font-weight:bold;">
       Camera: OFF
+    </p>
+
+    <!-- Progress indicator for words -->
+    <p id="wordProgress" style="text-align:center; color:#777; font-size:14px; display:none;">
+      Collecting frames... <span id="frameCount">0</span>/12
     </p>
 
     <p style="text-align:center; color:#777; font-size:14px;">
@@ -92,13 +108,15 @@ const ctx = canvas.getContext("2d");
 
 let stream = null;
 let sendInterval = null;
+let currentMode = "alphabet";
 
 /* ===== SENTENCE FORMATION ===== */
 let currentSentence = "";
 let lastDetectionTime = null;
-let lastDetectedLetter = null;
+let lastDetectedItem = null;
 const PAUSE_THRESHOLD = 2000; // 2 seconds = word break
 const CONFIDENCE_THRESHOLD = 0.5; // 50% minimum confidence
+const WORD_CONFIDENCE_THRESHOLD = 0.6; // 60% for words (higher accuracy needed)
 
 /* ===== HISTORY MANAGEMENT ===== */
 function loadHistory() {
@@ -149,7 +167,7 @@ function saveToHistory() {
     renderHistory();
     
     currentSentence = "";
-    lastDetectedLetter = null;
+    lastDetectedItem = null;
     lastDetectionTime = null;
     document.getElementById("sentenceBox").innerText = "";
     document.getElementById("detectedSign").innerText = "—";
@@ -166,7 +184,7 @@ function deleteHistoryItem(index) {
 
 function clearSentence() {
     currentSentence = "";
-    lastDetectedLetter = null;
+    lastDetectedItem = null;
     lastDetectionTime = null;
     document.getElementById("sentenceBox").innerText = "";
     document.getElementById("detectedSign").innerText = "—";
@@ -174,16 +192,18 @@ function clearSentence() {
     document.getElementById("confidenceBar").innerText = "0%";
 }
 
-function processDetection(letter, confidence) {
+function processDetection(label, confidence, isWord) {
     const now = Date.now();
     
+    const threshold = isWord ? WORD_CONFIDENCE_THRESHOLD : CONFIDENCE_THRESHOLD;
+    
     // Skip low confidence detections
-    if (confidence < CONFIDENCE_THRESHOLD) {
+    if (confidence < threshold) {
         return;
     }
     
     // Skip placeholder
-    if (letter === "-" || letter === "") {
+    if (label === "-" || label === "") {
         return;
     }
     
@@ -195,16 +215,37 @@ function processDetection(letter, confidence) {
         }
     }
     
-    // Skip consecutive duplicates
-    if (lastDetectedLetter === letter && currentSentence.endsWith(letter)) {
-        // Still update the time
-        lastDetectionTime = now;
-        return;
+    if (isWord) {
+        // For word mode: each detection is a full word
+        const word = label.toUpperCase();
+        
+        // Skip consecutive duplicates
+        if (lastDetectedItem === word && currentSentence.endsWith(word)) {
+            lastDetectionTime = now;
+            return;
+        }
+        
+        // Add space before new word if needed
+        if (currentSentence.length > 0 && !currentSentence.endsWith(" ") && !currentSentence.endsWith(" ")) {
+            currentSentence += " ";
+        }
+        
+        currentSentence += word;
+        lastDetectedItem = word;
+    } else {
+        // For alphabet mode: build letter by letter
+        const letter = label.toUpperCase();
+        
+        // Skip consecutive duplicates
+        if (lastDetectedItem === letter && currentSentence.endsWith(letter)) {
+            lastDetectionTime = now;
+            return;
+        }
+        
+        currentSentence += letter;
+        lastDetectedItem = letter;
     }
     
-    // Add letter to sentence
-    currentSentence += letter;
-    lastDetectedLetter = letter;
     lastDetectionTime = now;
     
     // Update UI
@@ -220,7 +261,7 @@ async function startCamera() {
 
         document.getElementById("cameraStatus").innerText = "Camera: ON";
 
-        sendInterval = setInterval(sendFrame, 400);
+        sendInterval = setInterval(sendFrame, 80);
         console.log("Camera started");
     } catch (err) {
         console.error("Camera error:", err);
@@ -255,14 +296,27 @@ async function sendFrame() {
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const frame = canvas.toDataURL("image/jpeg");
 
+    // Get current mode from radio buttons
+    const modeRadio = document.querySelector('input[name="detectionMode"]:checked');
+    currentMode = modeRadio ? modeRadio.value : "alphabet";
+
     try {
         const res = await fetch("/receive-frame/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ frame })
+            body: JSON.stringify({ frame: frame, mode: currentMode })
         });
 
         const data = await res.json();
+
+        // Show/hide word progress
+        const wordProgressEl = document.getElementById("wordProgress");
+        if (currentMode === "word" && data.progress !== undefined) {
+            wordProgressEl.style.display = "block";
+            document.getElementById("frameCount").innerText = data.progress;
+        } else {
+            wordProgressEl.style.display = "none";
+        }
 
         if (data.label !== undefined) {
             document.getElementById("detectedSign").innerText = data.label;
@@ -272,8 +326,12 @@ async function sendFrame() {
             bar.style.width = conf + "%";
             bar.innerText = conf + "%";
             
-            // Process letter for sentence formation
-            processDetection(data.label, data.confidence);
+            const isWord = data.is_word === true;
+            
+            // Process detection for sentence formation
+            if (data.label !== "-") {
+                processDetection(data.label, data.confidence, isWord);
+            }
         }
     } catch (e) {
         console.warn("Frame send failed");
@@ -283,6 +341,24 @@ async function sendFrame() {
 /* ===== INIT ===== */
 document.addEventListener("DOMContentLoaded", function() {
     renderHistory();
+    
+    // Load saved mode from localStorage
+    const savedMode = localStorage.getItem("detectionMode");
+    if (savedMode) {
+        const modeRadio = document.querySelector(`input[name="detectionMode"][value="${savedMode}"]`);
+        if (modeRadio) {
+            modeRadio.checked = true;
+        }
+    }
+    
+    // Save mode to localStorage when changed
+    document.querySelectorAll('input[name="detectionMode"]').forEach(radio => {
+        radio.addEventListener("change", function() {
+            localStorage.setItem("detectionMode", this.value);
+            // Clear sentence when mode changes
+            clearSentence();
+        });
+    });
 });
 </script>
 {% endblock %}

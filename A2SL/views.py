@@ -43,35 +43,54 @@ LABEL_PATH = os.path.join(
     "alphabet_labels.pkl"
 )
 
+WORD_MODEL_PATH = os.path.join(
+    BASE_DIR,
+    "live_sign",
+    "word_model.pkl"
+)
+
+WORD_LABEL_PATH = os.path.join(
+    BASE_DIR,
+    "live_sign",
+    "word_labels.pkl"
+)
+
 alphabet_model = joblib.load(MODEL_PATH)
 label_encoder = joblib.load(LABEL_PATH)
+word_model = joblib.load(WORD_MODEL_PATH)
+word_label_encoder = joblib.load(WORD_LABEL_PATH)
 
-print("MODEL LOADED FROM:", MODEL_PATH)
+print("ALPHABET MODEL LOADED FROM:", MODEL_PATH)
+print("WORD MODEL LOADED FROM:", WORD_MODEL_PATH)
 
 # ======================================================
-# MEDIAPIPE HANDS (63 FEATURES)
+# MEDIAPIPE HANDS (STATIC MODE - 82 FEATURES)
 # ======================================================
 
 mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(
+hands_static = mp_hands.Hands(
     static_image_mode=True,
     max_num_hands=1,
     min_detection_confidence=0.5
 )
 
+hands_word = mp_hands.Hands(
+    static_image_mode=False,
+    max_num_hands=2,
+    min_detection_confidence=0.7,
+    min_tracking_confidence=0.7
+)
 
-def extract_hand_features(img):
-    """
-    Returns (1, N) numpy array with enhanced features
-    """
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    result = hands.process(img_rgb)
+FRAMES_PER_WORD = 12
+VALUES_PER_FRAME = 126
 
-    if not result.multi_hand_landmarks:
-        return None
+word_frame_buffer = []
+word_state = "IDLE"
+word_last_prediction = "-"
+word_last_confidence = 0.0
 
-    landmarks = result.multi_hand_landmarks[0].landmark
-    
+
+def extract_hand_features(landmarks):
     features = []
     
     wrist = np.array([landmarks[0].x, landmarks[0].y, landmarks[0].z])
@@ -106,8 +125,27 @@ def extract_hand_features(img):
             v2 = base - mid
             angle = np.arccos(np.clip(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-6), -1, 1))
             features.append(angle)
-
+    
     return np.array(features).reshape(1, -1)
+
+
+def extract_word_frame_features(landmarks_list):
+    """Extract 126 wrist-normalized features from hand landmarks (for word detection with 2 hands)"""
+    features = []
+    
+    if len(landmarks_list) == 0:
+        return [0.0] * VALUES_PER_FRAME
+    
+    for hand_landmarks in landmarks_list:
+        wrist = np.array([hand_landmarks.landmark[0].x, hand_landmarks.landmark[0].y, hand_landmarks.landmark[0].z])
+        
+        for lm in hand_landmarks.landmark:
+            features.extend([lm.x - wrist[0], lm.y - wrist[1], lm.z - wrist[2]])
+    
+    if len(landmarks_list) == 1:
+        features.extend([0.0] * 63)
+    
+    return features
 
 
 # ======================================================
@@ -225,30 +263,39 @@ def live_detect_view(request):
 
 
 # ======================================================
-# RECEIVE FRAME + PREDICT (FINAL & FIXED)
+# RECEIVE FRAME + PREDICT (SUPPORTS ALPHABET & WORD MODES)
 # ======================================================
+current_detection_mode = {"mode": "alphabet"}
+
 @csrf_exempt
 def receive_frame(request):
+    global word_frame_buffer, word_state, word_last_prediction, word_last_confidence, current_detection_mode
+    
     if request.method != "POST":
         return JsonResponse({"error": "Invalid method"}, status=405)
 
     try:
         data = json.loads(request.body)
         frame = data.get("frame", "")
+        mode = data.get("mode", "alphabet")
+        
+        if mode != current_detection_mode["mode"]:
+            current_detection_mode["mode"] = mode
+            word_frame_buffer = []
+            word_state = "IDLE"
+            word_last_prediction = "-"
+            word_last_confidence = 0.0
 
-        # ---------- 1. Validate frame ----------
         if not frame or "," not in frame:
             return JsonResponse({
                 "label": "-",
                 "confidence": 0.0
             })
 
-        # ---------- 2. Decode base64 ----------
         header, encoded = frame.split(",", 1)
         img_bytes = base64.b64decode(encoded)
         np_arr = np.frombuffer(img_bytes, np.uint8)
 
-        # ---------- 3. Decode image ----------
         img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
         if img is None or img.size == 0:
@@ -257,50 +304,117 @@ def receive_frame(request):
                 "confidence": 0.0
             })
 
-        # ---------- 4. Mirror flip to match training ----------
         img = cv2.flip(img, 1)
-
-        # ---------- 5. Convert to RGB ----------
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        # ---------- 6. MediaPipe Hands ----------
-        results = hands.process(img_rgb)
-
-        if not results.multi_hand_landmarks:
-            return JsonResponse({
-                "label": "-",
-                "confidence": 0.0
-            })
-
-        # ---------- 7. Extract enhanced features ----------
-        X = extract_hand_features(img)
-
-        if X is None or X.shape[1] == 0:
-            return JsonResponse({
-                "label": "-",
-                "confidence": 0.0
-            })
-
-        print("Features shape:", X.shape)
-        print("X min:", np.min(X))
-        print("X max:", np.max(X))
-        print("X mean:", np.mean(X))
-
-
-        # ---------- 8. Predict ----------
-        pred = alphabet_model.predict(X)[0]
-        pred_letter = label_encoder.inverse_transform([int(pred)])[0]#convert number into alphabet
-
-        if hasattr(alphabet_model, "predict_proba"):
-            conf = float(np.max(alphabet_model.predict_proba(X)))
+        if mode == "word":
+            results = hands_word.process(img_rgb)
+            
+            if not results.multi_hand_landmarks:
+                if word_state == "PREDICTED":
+                    word_state = "IDLE"
+                if word_state == "IDLE":
+                    return JsonResponse({
+                        "label": "-",
+                        "confidence": 0.0,
+                        "progress": 0
+                    })
+                word_frame_buffer.clear()
+                word_state = "IDLE"
+                return JsonResponse({
+                    "label": word_last_prediction,
+                    "confidence": word_last_confidence,
+                    "is_word": True,
+                    "progress": 0
+                })
+            
+            if word_state == "IDLE":
+                word_state = "COLLECTING"
+                word_frame_buffer.clear()
+            
+            if word_state == "COLLECTING":
+                frame_features = extract_word_frame_features(results.multi_hand_landmarks)
+                word_frame_buffer.append(frame_features)
+                
+                if len(word_frame_buffer) < FRAMES_PER_WORD:
+                    return JsonResponse({
+                        "label": "-",
+                        "confidence": 0.0,
+                        "progress": len(word_frame_buffer),
+                        "is_word": True
+                    })
+                
+                if len(word_frame_buffer) > FRAMES_PER_WORD:
+                    word_frame_buffer.pop(0)
+                
+                if len(word_frame_buffer) == FRAMES_PER_WORD:
+                    X = np.array(word_frame_buffer).flatten().reshape(1, -1)
+                    
+                    if X.shape[1] != 1512:
+                        return JsonResponse({
+                            "label": "-",
+                            "confidence": 0.0,
+                            "is_word": True
+                        })
+                    
+                    pred = word_model.predict(X)[0]
+                    pred_word = word_label_encoder.inverse_transform([int(pred)])[0]
+                    
+                    if hasattr(word_model, "predict_proba"):
+                        conf = float(np.max(word_model.predict_proba(X)))
+                    else:
+                        conf = 1.0
+                    
+                    word_last_prediction = pred_word
+                    word_last_confidence = conf
+                    word_state = "PREDICTED"
+                    
+                    return JsonResponse({
+                        "label": pred_word,
+                        "confidence": conf,
+                        "is_word": True,
+                        "progress": 12
+                    })
+            
+            if word_state == "PREDICTED":
+                return JsonResponse({
+                    "label": word_last_prediction,
+                    "confidence": word_last_confidence,
+                    "is_word": True,
+                    "progress": 12
+                })
+        
         else:
-            conf = 1.0
+            results = hands_static.process(img_rgb)
 
-        # ---------- 9. Return SAFE JSON ----------
-        return JsonResponse({
-            "label": pred_letter,
-            "confidence": float(conf)
-        })
+            if not results.multi_hand_landmarks:
+                return JsonResponse({
+                    "label": "-",
+                    "confidence": 0.0
+                })
+
+            landmarks = results.multi_hand_landmarks[0].landmark
+            X = extract_hand_features(landmarks)
+
+            if X is None or X.shape[1] == 0:
+                return JsonResponse({
+                    "label": "-",
+                    "confidence": 0.0
+                })
+
+            pred = alphabet_model.predict(X)[0]
+            pred_letter = label_encoder.inverse_transform([int(pred)])[0]
+
+            if hasattr(alphabet_model, "predict_proba"):
+                conf = float(np.max(alphabet_model.predict_proba(X)))
+            else:
+                conf = 1.0
+
+            return JsonResponse({
+                "label": pred_letter,
+                "confidence": float(conf),
+                "is_word": False
+            })
 
     except Exception as e:
         print("receive_frame ERROR:", e)
@@ -308,3 +422,8 @@ def receive_frame(request):
             "label": "-",
             "confidence": 0.0
         })
+
+
+@csrf_exempt
+def reset_prediction(request):
+    return JsonResponse({"status": "reset"})
