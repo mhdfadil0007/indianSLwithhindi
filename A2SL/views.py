@@ -43,21 +43,52 @@ LABEL_PATH = os.path.join(
     "alphabet_labels.pkl"
 )
 
+WORD_MODEL_PATH = os.path.join(
+    BASE_DIR,
+    "live_sign",
+    "word_model.pkl"
+)
+
+WORD_LABEL_PATH = os.path.join(
+    BASE_DIR,
+    "live_sign",
+    "word_labels.pkl"
+)
+
 alphabet_model = joblib.load(MODEL_PATH)
 label_encoder = joblib.load(LABEL_PATH)
+word_model = joblib.load(WORD_MODEL_PATH)
+word_label_encoder = joblib.load(WORD_LABEL_PATH)
 
-print("MODEL LOADED FROM:", MODEL_PATH)
+print("ALPHABET MODEL LOADED FROM:", MODEL_PATH)
+print("WORD MODEL LOADED FROM:", WORD_MODEL_PATH)
 
 # ======================================================
 # MEDIAPIPE HANDS (STATIC MODE - 82 FEATURES)
 # ======================================================
 
 mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(
+hands_static = mp_hands.Hands(
     static_image_mode=True,
     max_num_hands=1,
     min_detection_confidence=0.5
 )
+
+hands_word = mp_hands.Hands(
+    static_image_mode=False,
+    max_num_hands=2,
+    min_detection_confidence=0.7,
+    min_tracking_confidence=0.7
+)
+
+FRAMES_PER_WORD = 12
+VALUES_PER_FRAME = 126
+WORD_PREDICTION_COOLDOWN = 3
+MAX_MISSED_FRAMES = 3
+
+word_frame_buffer = []
+word_prediction_count = 0
+word_missed_frames = 0
 
 
 def extract_hand_features(landmarks):
@@ -97,6 +128,23 @@ def extract_hand_features(landmarks):
             features.append(angle)
     
     return np.array(features).reshape(1, -1)
+
+
+def extract_word_frame_features(landmarks_list):
+    """Extract 126 features from hand landmarks (for word detection with 2 hands)"""
+    features = []
+    
+    if len(landmarks_list) == 0:
+        return [0.0] * VALUES_PER_FRAME
+    
+    for hand_landmarks in landmarks_list:
+        for lm in hand_landmarks.landmark:
+            features.extend([lm.x, lm.y, lm.z])
+    
+    if len(landmarks_list) == 1:
+        features.extend([0.0] * 63)
+    
+    return features
 
 
 # ======================================================
@@ -214,16 +262,27 @@ def live_detect_view(request):
 
 
 # ======================================================
-# RECEIVE FRAME + PREDICT (STATIC MODE)
+# RECEIVE FRAME + PREDICT (SUPPORTS ALPHABET & WORD MODES)
 # ======================================================
+current_detection_mode = {"mode": "alphabet"}
+
 @csrf_exempt
 def receive_frame(request):
+    global word_frame_buffer, word_prediction_count, word_missed_frames, current_detection_mode
+    
     if request.method != "POST":
         return JsonResponse({"error": "Invalid method"}, status=405)
 
     try:
         data = json.loads(request.body)
         frame = data.get("frame", "")
+        mode = data.get("mode", "alphabet")
+        
+        if mode != current_detection_mode["mode"]:
+            current_detection_mode["mode"] = mode
+            word_frame_buffer = []
+            word_prediction_count = 0
+            word_missed_frames = 0
 
         if not frame or "," not in frame:
             return JsonResponse({
@@ -246,35 +305,100 @@ def receive_frame(request):
         img = cv2.flip(img, 1)
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        results = hands.process(img_rgb)
-
-        if not results.multi_hand_landmarks:
+        if mode == "word":
+            results = hands_word.process(img_rgb)
+            
+            if not results.multi_hand_landmarks:
+                word_missed_frames += 1
+                if word_missed_frames > MAX_MISSED_FRAMES:
+                    word_frame_buffer.clear()
+                    word_prediction_count = 0
+                return JsonResponse({
+                    "label": "-",
+                    "confidence": 0.0,
+                    "progress": len(word_frame_buffer)
+                })
+            
+            word_missed_frames = 0
+            
+            frame_features = extract_word_frame_features(results.multi_hand_landmarks)
+            word_frame_buffer.append(frame_features)
+            
+            if len(word_frame_buffer) > FRAMES_PER_WORD:
+                word_frame_buffer.pop(0)
+            
+            if len(word_frame_buffer) < FRAMES_PER_WORD:
+                return JsonResponse({
+                    "label": "-",
+                    "confidence": 0.0,
+                    "progress": len(word_frame_buffer)
+                })
+            
+            word_prediction_count += 1
+            
+            if word_prediction_count < WORD_PREDICTION_COOLDOWN:
+                return JsonResponse({
+                    "label": "-",
+                    "confidence": 0.0,
+                    "progress": len(word_frame_buffer)
+                })
+            
+            X = np.array(word_frame_buffer).flatten().reshape(1, -1)
+            
+            if X.shape[1] != 1512:
+                return JsonResponse({
+                    "label": "-",
+                    "confidence": 0.0
+                })
+            
+            pred = word_model.predict(X)[0]
+            pred_word = word_label_encoder.inverse_transform([int(pred)])[0]
+            
+            if hasattr(word_model, "predict_proba"):
+                conf = float(np.max(word_model.predict_proba(X)))
+            else:
+                conf = 1.0
+            
+            word_frame_buffer.clear()
+            word_prediction_count = 0
+            
             return JsonResponse({
-                "label": "-",
-                "confidence": 0.0
+                "label": pred_word,
+                "confidence": float(conf),
+                "is_word": True
             })
-
-        landmarks = results.multi_hand_landmarks[0].landmark
-        X = extract_hand_features(landmarks)
-
-        if X is None or X.shape[1] == 0:
-            return JsonResponse({
-                "label": "-",
-                "confidence": 0.0
-            })
-
-        pred = alphabet_model.predict(X)[0]
-        pred_letter = label_encoder.inverse_transform([int(pred)])[0]
-
-        if hasattr(alphabet_model, "predict_proba"):
-            conf = float(np.max(alphabet_model.predict_proba(X)))
+        
         else:
-            conf = 1.0
+            results = hands_static.process(img_rgb)
 
-        return JsonResponse({
-            "label": pred_letter,
-            "confidence": float(conf)
-        })
+            if not results.multi_hand_landmarks:
+                return JsonResponse({
+                    "label": "-",
+                    "confidence": 0.0
+                })
+
+            landmarks = results.multi_hand_landmarks[0].landmark
+            X = extract_hand_features(landmarks)
+
+            if X is None or X.shape[1] == 0:
+                return JsonResponse({
+                    "label": "-",
+                    "confidence": 0.0
+                })
+
+            pred = alphabet_model.predict(X)[0]
+            pred_letter = label_encoder.inverse_transform([int(pred)])[0]
+
+            if hasattr(alphabet_model, "predict_proba"):
+                conf = float(np.max(alphabet_model.predict_proba(X)))
+            else:
+                conf = 1.0
+
+            return JsonResponse({
+                "label": pred_letter,
+                "confidence": float(conf),
+                "is_word": False
+            })
 
     except Exception as e:
         print("receive_frame ERROR:", e)

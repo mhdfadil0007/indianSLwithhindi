@@ -493,3 +493,11 @@ i changed the versions in requirements.txt to match my python version of 3.12.3
 - so i went with an option of reducing to 20 samples per letter and removed stability requirement(since letters now require motion), thereby reducing the time to 5-6 minutes for training
 
 - i came back to the static data itself instead of sequential data, and the views.py(earlier updated for sequence mode) was reverted back to static mode for live detection
+  
+
+
+- now comes the word section, where i recorded and trained words in the records file with 68 percent accuracy
+- but the signs were not picked up in ui, this was because there was a mismatch during training and in views
+- training used raw landmark coordinated whereas in views, used wrist-normalized coordinates
+- so changed views and made it similar to training method and reduced min detection and tracking confidence to 0.7 from 0.5(reduction part in mediapipe)
+- still error was persistent
