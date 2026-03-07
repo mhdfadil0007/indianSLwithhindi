@@ -80,7 +80,7 @@ indianSLwithhindi/
 │
 ├── media/ → (Optional uploads)
 │
-└── env/ → Virtual Environment
+└── tf-env/ → Virtual Environment
 
 ---
 
@@ -262,14 +262,12 @@ Because words involve motion. A single frame cannot capture movement.
 Custom dataset recorders were built.
 
 ## Static Alphabet Dataset
-- 30 samples per letter
+- 20 samples per letter
 - Total ≈ 780 samples
 - Saved as X.npy and y.npy
 
 ## Word Dataset
 - 20 samples per word
-- Multi-frame capture
-- 1512 features per sample
 
 ---
 
@@ -301,7 +299,7 @@ Custom dataset recorders were built.
 # 📈 8. Accuracy
 
 - Alphabet Model: ~90–95%
-- Word Model: ~75–85%
+- Word Model: ~92%
 
 Accuracy depends on:
 - Lighting
