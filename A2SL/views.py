@@ -21,6 +21,14 @@ from googletrans import Translator
 
 import mediapipe as mp
 
+#CONSIST OF BACKEND LOGIC FOR BOTH MODULES
+
+
+
+
+
+
+
 # -------------------- SAFE LEMMATIZER --------------------
 from n import safe_lemmatize
 
@@ -194,6 +202,7 @@ def logout_view(request):
 # ======================================================
 
 @login_required(login_url="login")
+# language detection : if hindi translate to english using goole translate api, else english
 def animation_view(request):
     if request.method == "POST":
         text = request.POST.get("sen", "")
@@ -210,29 +219,34 @@ def animation_view(request):
         else:
             translated_text = text.lower()
 
-        words = word_tokenize(translated_text)
-        tagged = nltk.pos_tag(words)
+# Nlp processing(tokenizze using nltk, post tagging, lemmatization)
 
+# tokenization
+        words = word_tokenize(translated_text)
+        # pos tagging
+        tagged = nltk.pos_tag(words)
+# remove stop_words or common word filtering
         stop_words = {
             "mightn't", "re", "wasn", "wouldn", "be", "has", "that",
             "does", "shouldn", "do", "you've", "off", "for",
             "didn't", "m", "ain"
         }
-
+# dont remove these words
         PROTECTED_WORDS = {"are", "am", "is", "was", "were", "can", "will"}
 
+# Lemmatization happens here
         filtered_words = [
             safe_lemmatize(w, tag)
             for w, (_, tag) in zip(words, tagged)
             if w not in stop_words or w in PROTECTED_WORDS
         ]
-
+# check for video matching
         final_words = []
         for w in filtered_words:
             if finders.find(f"{w}.mp4"):
                 final_words.append(w)
             else:
-                final_words.extend(list(w))
+                final_words.extend(list(w))#Split unknown words into individual letters(eg:"AI"->"A","I")
 
         audio_file = None
         if language == "hi":
@@ -241,7 +255,8 @@ def animation_view(request):
             audio_path = os.path.join(settings.MEDIA_ROOT, "output.mp3")
             tts.save(audio_path)
             audio_file = settings.MEDIA_URL + "output.mp3"
-
+            
+# render animation.html with word list created above
         return render(request, "animation.html", {
             "words": final_words,
             "text": text,
