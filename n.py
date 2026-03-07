@@ -7,6 +7,8 @@ nltk.download('punkt_tab')
 nltk.download('wordnet')
 nltk.download('stopwords')
 
+# NLP helper, lemmatization function
+
 AUXILIARY_VERBS = {"am", "is", "are", "was", "were", "be", "been", "being"}
 
 lemmatizer = WordNetLemmatizer()

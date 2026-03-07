@@ -1,0 +1,52 @@
+============================================================
+WORD DETECTION - CLASSIFICATION REPORT
+============================================================
+
+Overall Accuracy: 92.86%
+
+Total Test Samples: 56
+Number of Classes: 14
+
+------------------------------------------------------------
+CLASSIFICATION REPORT
+------------------------------------------------------------
+
+              precision    recall  f1-score   support
+
+         BAD       1.00      1.00      1.00         4
+        COME       1.00      1.00      1.00         4
+          GO       1.00      1.00      1.00         4
+        GOOD       1.00      1.00      1.00         4
+        HELP       1.00      1.00      1.00         4
+         HOW       1.00      0.75      0.86         4
+        NAME       1.00      0.75      0.86         4
+          NO       1.00      1.00      1.00         4
+      PLEASE       0.80      1.00      0.89         4
+       SORRY       1.00      1.00      1.00         4
+        STOP       1.00      1.00      1.00         4
+       THANK       1.00      1.00      1.00         4
+         YES       1.00      0.50      0.67         4
+         YOU       0.57      1.00      0.73         4
+
+    accuracy                           0.93        56
+   macro avg       0.96      0.93      0.93        56
+weighted avg       0.96      0.93      0.93        56
+
+
+------------------------------------------------------------
+WORST PERFORMING WORDS (Bottom 5)
+------------------------------------------------------------
+  YES: F1=0.667, Precision=1.000, Recall=0.500, Support=4.0
+  YOU: F1=0.727, Precision=0.571, Recall=1.000, Support=4.0
+  HOW: F1=0.857, Precision=1.000, Recall=0.750, Support=4.0
+  NAME: F1=0.857, Precision=1.000, Recall=0.750, Support=4.0
+  PLEASE: F1=0.889, Precision=0.800, Recall=1.000, Support=4.0
+
+------------------------------------------------------------
+BEST PERFORMING WORDS (Top 5)
+------------------------------------------------------------
+  THANK: F1=1.000
+  STOP: F1=1.000
+  SORRY: F1=1.000
+  NO: F1=1.000
+  HELP: F1=1.000
