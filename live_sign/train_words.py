@@ -1,3 +1,31 @@
+"""
+train_words.py
+
+Purpose:
+    Trains an SVM (Support Vector Machine) classifier on dynamic word sign data.
+    
+    This script is similar to train_alphabets_static.py but works with
+    multi-frame gesture data (12 frames × 126 features = 1512 features per sample).
+    
+    Pipeline:
+    1. Load recorded word data (features + labels)
+    2. Encode labels using LabelEncoder
+    3. Split data into train/test sets (80/20 split)
+    4. Train SVM 
+    5. Evaluate model and generate confusion matrix + classification report
+    6. Save trained model and label encoder
+
+Input:
+    - live_sign/data_words_v2/X.npy: Feature array (N x 1512)
+    - live_sign/data_words_v2/y.npy: Label array (N,)
+
+Output:
+    - live_sign/word_model.pkl: Trained SVM model
+    - live_sign/word_labels.pkl: LabelEncoder for inverse transform
+    - live_sign/word_confusion_matrix.png: Visualization
+    - live_sign/word_classification_report.txt: Detailed metrics
+"""
+
 import numpy as np
 import os
 import joblib
@@ -10,8 +38,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 
+# ============================================================================
+# LOAD DATA
+# ============================================================================
+
 DATA_DIR = "live_sign/data_words_v2"
 
+# Load features (X) and labels (y) from numpy files
 X = np.load(os.path.join(DATA_DIR, "X.npy"))
 y = np.load(os.path.join(DATA_DIR, "y.npy"))
 
@@ -19,9 +52,22 @@ print("Word data loaded:")
 print("X shape:", X.shape)
 print("y shape:", y.shape)
 
+
+# ============================================================================
+# LABEL ENCODING
+# ============================================================================
+
+# Convert string labels (HOW, YOU, THANK, ...) to integer labels (0, 1, 2, ...)
 encoder = LabelEncoder()
 y_encoded = encoder.fit_transform(y)
 
+
+# ============================================================================
+# TRAIN/TEST SPLIT
+# ============================================================================
+
+# Split data: 80% training, 20% testing
+# stratify ensures equal distribution of each class in train/test sets
 X_train, X_test, y_train, y_test = train_test_split(
     X,
     y_encoded,
@@ -30,26 +76,50 @@ X_train, X_test, y_train, y_test = train_test_split(
     stratify=y_encoded
 )
 
+
+# ============================================================================
+# MODEL TRAINING
+# ============================================================================
+
+# Create SVM classifier with RBF (Radial Basis Function) kernel
+# probability=True: Enable probability estimates for confidence scores
+# Note: Unlike train_alphabets_static.py, no StandardScaler is used here
+#       (the data may already be normalized from the recording process)
 model = SVC(kernel="rbf", probability=True)
+
+# Train the model
 model.fit(X_train, y_train)
 
+
+# ============================================================================
+# EVALUATION
+# ============================================================================
+
+# Make predictions on test set
 y_pred = model.predict(X_test)
+
+# Calculate accuracy
 accuracy = accuracy_score(y_test, y_pred)
 
 print(f"Word Model Accuracy: {accuracy * 100:.2f}%")
 
-# ===================== CONFUSION MATRIX & METRICS =====================
+
+# ============================================================================
+# CONFUSION MATRIX & CLASSIFICATION REPORT
+# ============================================================================
+
 print("\n" + "="*60)
 print("GENERATING CLASSIFICATION REPORT & CONFUSION MATRIX")
 print("="*60)
 
-# Get class names
+# Get class names from encoder (e.g., ['HOW', 'YOU', 'THANK', ...])
 class_names = encoder.classes_
 
-# Generate confusion matrix
+# Generate confusion matrix: rows = true labels, columns = predicted
 cm = confusion_matrix(y_test, y_pred)
 
-# Classification report
+# Generate classification report as dictionary and string
+# Includes: precision, recall, f1-score, support for each class
 report = classification_report(y_test, y_pred, target_names=class_names, output_dict=True)
 report_str = classification_report(y_test, y_pred, target_names=class_names)
 
@@ -73,10 +143,17 @@ best_5 = sorted_classes[-5:][::-1]
 for word, f1 in best_5:
     print(f"  {word}: F1={f1:.3f}")
 
-# Plot confusion matrix (smaller figure for words)
+
+# ============================================================================
+# PLOT CONFUSION MATRIX
+# ============================================================================
+
+# Determine figure size based on number of classes
+# Each class needs ~0.8 inches, minimum 10 inches
 num_classes = len(class_names)
 fig_size = max(10, num_classes * 0.8)
 
+# Create heatmap visualization of confusion matrix
 plt.figure(figsize=(fig_size, fig_size * 0.9))
 sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
             xticklabels=class_names, yticklabels=class_names,
@@ -91,7 +168,11 @@ plt.savefig('live_sign/word_confusion_matrix.png', dpi=150)
 plt.close()
 print("\nConfusion matrix saved to: live_sign/word_confusion_matrix.png")
 
-# Save classification report to text file
+
+# ============================================================================
+# SAVE CLASSIFICATION REPORT
+# ============================================================================
+
 report_path = "live_sign/word_classification_report.txt"
 with open(report_path, 'w') as f:
     f.write("="*60 + "\n")
@@ -122,8 +203,15 @@ with open(report_path, 'w') as f:
 
 print(f"Classification report saved to: {report_path}")
 
-# Save model
+
+# ============================================================================
+# SAVE MODEL
+# ============================================================================
+
+# Save trained SVM model
 joblib.dump(model, "live_sign/word_model.pkl")
+
+# Save label encoder for inverse transform (predictions -> words)
 joblib.dump(encoder, "live_sign/word_labels.pkl")
 
 print("\n✅ Word model saved successfully")

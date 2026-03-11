@@ -45,29 +45,6 @@ Capture hand landmark data from webcam for each alphabet letter (A-Z).
 3. **Auto-Capture**: Automatically captures samples at regular intervals
 4. **Feature Extraction**: Uses MediaPipe to extract 21 hand landmarks
 
-### MediaPipe Hand Landmarks
-
-```
-21 landmarks per hand, each with (x, y, z) coordinates = 63 raw features
-```
-
-| Landmark | Description |
-|----------|-------------|
-| 0 | Wrist |
-| 1-4 | Thumb (CMC, IP, MCP, TIP) |
-| 5-8 | Index Finger (MCP, PIP, DIP, TIP) |
-| 9-12 | Middle Finger |
-| 13-16 | Ring Finger |
-| 17-20 | Pinky Finger |
-
-### Enhanced Features (82 total)
-
-| Feature Type | Count | Description |
-|--------------|-------|-------------|
-| Normalized Coordinates | 63 | MediaPipe (x, y, z) relative to wrist |
-| Finger Lengths | 5 | Distance from fingertip to finger base |
-| Fingertip Distances | 10 | Pairwise distances between fingertips |
-| Finger Angles | 4 | Angles at finger joints |
 
 ### Running the Script
 
@@ -83,9 +60,6 @@ cd /home/adheeb/Desktop/projects/indianSLwithhindi
 ### Configuration
 - Samples per letter: 50
 - Total letters: 26 (A-Z)
-- Capture delay: 0.08 seconds between samples
-- Letter change delay: 0.3 seconds
-
 ---
 
 ## Step 2: Model Training
@@ -102,35 +76,9 @@ Train an SVM classifier on the recorded data.
 2. **Augmentation**: Apply horizontal flip to double training data
 3. **Encoding**: Convert letter labels to integers (A=0, B=1, ...)
 4. **Split**: 80% training, 20% testing
-5. **Pipeline**: StandardScaler → SVC (RBF kernel)
+5. **Pipeline**: StandardScaler → SVM
 6. **Save**: Export model and label encoder
 
-### Model Architecture
-
-```python
-Pipeline([
-    ("scaler", StandardScaler()),      # Normalize features
-    ("svm", SVC(                       # SVM classifier
-        kernel="rbf",                   # Radial Basis Function
-        C=10,                           # Regularization parameter
-        gamma="scale",                  # Auto gamma
-        probability=True                # Enable probability estimates
-    ))
-])
-```
-
-### Horizontal Flip Augmentation
-
-```python
-def augment_flip(X, y):
-    X_flipped = X.copy()
-    for i in range(len(X_flipped)):
-        for j in range(21):
-            idx = j * 3
-            X_flipped[i, idx] = 1.0 - X_flipped[i, idx]      # Mirror x
-            X_flipped[i, idx + 2] = -X_flipped[i, idx + 2]  # Invert z
-    return np.vstack([X, X_flipped]), np.concatenate([y, y])
-```
 
 ### Running the Script
 
@@ -199,25 +147,6 @@ return JsonResponse({
 })
 ```
 
-### Frontend: live_detect.html
-
-**Features:**
-- Webcam preview (getUserMedia API)
-- Real-time frame capture (400ms interval)
-- Sentence formation with pause detection
-- History storage (localStorage)
-
-**Sentence Formation Logic:**
-- Letters accumulate as signs are detected
-- 2-second pause → word break (space added)
-- Confidence < 50% → ignored
-- Same letter consecutively → skipped
-
-**History Management:**
-- Save sentences to browser localStorage
-- Delete individual entries
-- Persists across page refreshes
-
 ### Running the Server
 
 ```bash
@@ -230,16 +159,7 @@ Open: `http://127.0.0.1:8000/live-detect/`
 
 ---
 
-## Key Configuration Matching
 
-| Parameter | Training | Inference (Django) |
-|-----------|----------|-------------------|
-| MediaPipe mode | `static_image_mode=True` | `static_image_mode=True` |
-| Detection confidence | 0.5 | 0.5 |
-| Image flip | `cv2.flip(frame, 1)` | `cv2.flip(img, 1)` |
-| Features | 82 enhanced | 82 enhanced |
-
----
 
 ## Quick Commands Reference
 
@@ -252,28 +172,4 @@ Open: `http://127.0.0.1:8000/live-detect/`
 
 ---
 
-## Troubleshooting
 
-### Always predicting "Z"
-- Check: Is `cv2.flip(img, 1)` in Django receive_frame?
-- Check: Is `static_image_mode=True` in Django?
-
-### Low accuracy
-- Check: Feature count matches (82 in training vs inference)
-- Check: MediaPipe confidence threshold
-- Try: Re-record data with consistent hand positions
-
-### Camera not working
-- Check: Browser permissions for camera access
-- Check: HTTPS requirement (some browsers require HTTPS for getUserMedia)
-
----
-
-## Files Modified During Development
-
-| File | Changes |
-|------|---------|
-| `A2SL/views.py` | Added flip, fixed MediaPipe config, enhanced features |
-| `live_sign/record_alphabets_static.py` | Added enhanced feature extraction |
-| `live_sign/train_alphabets_static.py` | Added augmentation, probability |
-| `templates/live_detect.html` | Added sentence formation, history |

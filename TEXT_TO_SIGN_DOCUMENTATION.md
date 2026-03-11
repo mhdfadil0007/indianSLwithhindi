@@ -9,11 +9,8 @@
 5. [Data Flow Diagram](#data-flow-diagram)
 6. [Step-by-Step Processing](#step-by-step-processing)
 7. [Example Walkthrough](#example-walkthrough)
-8. [NLP Processing Details](#nlp-processing-details)
-9. [Video Matching Logic](#video-matching-logic)
-10. [Frontend Processing](#frontend-processing)
-11. [API & Dependencies](#api--dependencies)
-12. [Error Handling](#error-handling)
+8.  [Frontend Processing](#frontend-processing)
+
 
 ---
 
@@ -79,7 +76,7 @@ The **Text to Sign Language Animation** module converts user-provided text (in E
 | `templates/home.html` | Home page with navigation |
 | `templates/login.html` | Login form |
 | `templates/signup.html` | Registration form |
-| `static/mic3.png` | Microphone icon for speech input |
+
 
 ---
 
@@ -481,109 +478,6 @@ Language: English
 
 ---
 
-### Example 3: Sentence with Stopwords
-
-**Input:**
-```
-Text: "The weather is good today"
-Language: English
-```
-
-**Processing:**
-
-| Word | Stopword? | Video Exists? | Output |
-|------|-----------|---------------|--------|
-| The | ✓ (removed) | - | - |
-| weather | ✗ | ✗ | "w", "e", "a", "t", "h", "e", "r" |
-| is | ✓ but PROTECTED | ✗ | "i", "s" |
-| good | ✗ | ✓ | "good" |
-| today | ✗ | ✗ | "t", "o", "d", "a", "y" |
-
-**Final words:** `["w", "e", "a", "t", "h", "e", "r", "i", "s", "good", "t", "o", "d", "a", "y"]`
-
----
-
-## NLP Processing Details
-
-### Tokenization
-
-Uses NLTK's `word_tokenize()` which handles:
-- Contractions (won't, can't)
-- Punctuation (., ,, ?)
-- Special characters
-
-```python
-from nltk.tokenize import word_tokenize
-
-text = "Hello, how's it going?"
-tokens = word_tokenize(text)
-# Output: ['Hello', ',', 'how', "'s", 'it', 'going', '?']
-```
-
-### POS Tagging
-
-Part-of-Speech tags used for lemmatization:
-
-| Tag | Meaning | Example |
-|-----|---------|---------|
-| VB | Verb (base) | "run" |
-| VBP | Verb (non-3rd person) | "run" |
-| VBZ | Verb (3rd person) | "runs" |
-| VBG | Verb (gerund) | "running" |
-| VBN | Verb (past participle) | "run" |
-| NN | Noun (singular) | "cat" |
-| NNS | Noun (plural) | "cats" |
-| JJ | Adjective | "big" |
-| JJR | Adjective (comparative) | "bigger" |
-| JJS | Adjective (superlative) | "biggest" |
-| PRP | Personal pronoun | "I", "you" |
-| UH | Interjection | "hello" |
-
-### Lemmatization
-
-Uses WordNet lemmatizer with POS-aware processing:
-
-```python
-from nltk.stem import WordNetLemmatizer
-from nltk.corpus import wordnet
-
-lemmatizer = WordNetLemmatizer()
-
-# With POS tag
-lemmatizer.lemmatize("running", wordnet.VERB)  # "run"
-lemmatizer.lemmatize("better", wordnet.ADJ)    # "good"
-lemmatizer.lemmatize("children", wordnet.NOUN) # "child"
-```
-
-### Protected Words
-
-Certain words must not be lemmatized because they are essential in sign language:
-
-```python
-PROTECTED_WORDS = {"are", "am", "is", "was", "were", "can", "will"}
-```
-
-Without protection: "are" → "be" (loses meaning)
-With protection: "are" → "are" (correct)
-
----
-
-## Video Matching Logic
-
-### File Lookup Process
-
-```python
-def match_word_to_video(word, finders):
-    # Convert to lowercase for matching
-    word_lower = word.lower()
-    
-    # Check if video file exists
-    if finders.find(f"{word_lower}.mp4"):
-        return [word_lower]
-    else:
-        # Split into individual letters
-        return list(word_lower)
-```
 
 ### Available Video Files
 
@@ -605,23 +499,7 @@ Yes.mp4, No.mp4, Please.mp4, Sorry.mp4,
 ...
 ```
 
-### Matching Algorithm
 
-```
-For each word in filtered_words:
-    │
-    ├──▶ Does word.mp4 exist?
-    │       │
-    │       ├── YES ──▶ Add word to final_words
-    │       │
-    │       └── NO ──▶ Split into letters
-    │                       │
-    │                       └──▶ Add each letter to final_words
-    │
-    └──▶ Continue to next word
-```
-
----
 
 ## Frontend Processing
 
@@ -635,48 +513,9 @@ The template receives the processed word list and renders:
 2. **Results Table** - Original text, translated text, animation words
 3. **Video Player** - HTML5 video element for playback
 4. **Audio Player** - For Hindi TTS output
-5. **Spectrogram** - Real-time audio visualization
 
-### JavaScript Playback Logic
 
-**Location:** `templates/animation.html:350-404`
 
-```javascript
-function play() {
-    // 1. Collect all words from <li> elements
-    var videos = document.getElementById("list").getElementsByTagName("li");
-    
-    // 2. Build video source paths
-    var videoSource = [];
-    for (var j = 0; j < videos.length; j++) {
-        videoSource[j] = "/static/" + videos[j].innerHTML + ".mp4";
-    }
-    
-    // 3. Play first video
-    videoPlay(0);
-    
-    // 4. Sequential playback handler
-    function myHandler() {
-        i++;
-        if (i == videoCount) {
-            document.getElementById("videoPlayer").pause();
-        } else {
-            videoPlay(i);  // Play next video
-        }
-    }
-}
-
-function videoPlay(videoNum) {
-    // Highlight current word
-    document.getElementById("list").getElementsByTagName("li")[videoNum]
-        .style.color = "#09edc7";
-    
-    // Set video source and play
-    document.getElementById("videoPlayer").setAttribute("src", videoSource[videoNum]);
-    document.getElementById("videoPlayer").load();
-    document.getElementById("videoPlayer").play();
-}
-```
 
 ### Speech-to-Text
 
@@ -700,33 +539,9 @@ function record() {
 }
 ```
 
-### Spectrogram Visualization
 
-**Location:** `templates/animation.html:426-476`
 
-Real-time audio visualization during speech input using Web Audio API:
 
-```javascript
-function startSpectrogram() {
-    audioContext = new AudioContext();
-    analyser = audioContext.createAnalyser();
-    
-    navigator.mediaDevices.getUserMedia({ audio: true })
-        .then(stream => {
-            source = audioContext.createMediaStreamSource(stream);
-            source.connect(analyser);
-            
-            function draw() {
-                analyser.getByteFrequencyData(dataArray);
-                // Draw frequency bars on canvas
-            }
-        });
-}
-```
-
----
-
-## API & Dependencies
 
 ### Python Libraries
 
@@ -738,22 +553,10 @@ function startSpectrogram() {
 | `gTTS` | Google Text-to-Speech |
 | `Pillow` | Image processing (if needed) |
 
-### NLTK Data Downloads
 
-```python
-nltk.download('averaged_perceptron_tagger_eng')
-nltk.download('punkt_tab')
-nltk.download('wordnet')
-nltk.download('stopwords')
-```
 
-### JavaScript APIs
 
-| API | Purpose |
-|-----|---------|
-| `webkitSpeechRecognition` | Speech-to-text |
-| `Web Audio API` | Audio visualization |
-| `HTML5 Video` | Video playback |
+
 
 ### External Services
 
@@ -764,58 +567,7 @@ nltk.download('stopwords')
 
 ---
 
-## Error Handling
 
-### Translation Errors
-
-```python
-try:
-    translated_text = translator.translate(
-        text, src="hi", dest="en"
-    ).text.lower()
-except Exception:
-    translated_text = text.lower()  # Fallback to original
-```
-
-If translation fails, uses original text (English).
-
-### Missing Video Files
-
-```python
-if finders.find(f"{w}.mp4"):
-    final_words.append(w)
-else:
-    final_words.extend(list(w))  # Split into letters
-```
-
-Unknown words are split into individual letters as fallback.
-
-### Empty Input
-
-The form requires at least some text. Empty submissions result in empty word list.
-
-### Microphone Errors
-
-```javascript
-recognition.onerror = function(event) {
-    console.error('Speech recognition error:', event.error);
-    stopSpectrogram();
-};
-```
-
----
-
-## URL Configuration
-
-**Location:** `A2SL/urls.py`
-
-```python
-path('animation/', views.animation_view, name='animation'),
-```
-
-**Full URL:** `http://127.0.0.1:8000/animation/`
-
----
 
 ## Session Flow
 
@@ -842,16 +594,3 @@ path('animation/', views.animation_view, name='animation'),
 
 ---
 
-## Summary
-
-The Text to Sign Language Animation module is a complete pipeline that:
-
-1. **Receives** user text input (English or Hindi)
-2. **Translates** Hindi to English if needed
-3. **Processes** text using NLP (tokenize, POS tag, lemmatize, filter)
-4. **Matches** each word to available video files
-5. **Falls back** to letter-by-letter for unknown words
-6. **Renders** HTML with video list
-7. **Plays** videos sequentially in browser
-
-This creates an accessible communication bridge for hearing-impaired individuals.
