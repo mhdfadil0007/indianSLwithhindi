@@ -1,4 +1,4 @@
-# 🤟 AI Sign Language Recognition & Translation Platform  
+# AI Sign Language Recognition & Translation Platform  
 ### Full-Stack Web Application with Real-Time Gesture Detection
 
 ---
@@ -48,39 +48,7 @@ SVM Machine Learning Model
 Real-Time Prediction Output
 ```
 
-indianSLwithhindi/
-│
-├── manage.py
-├── requirements.txt
-├── db.sqlite3
-│
-├── A2SL/ → Main Django Project Folder
-│ ├── init.py
-│ ├── settings.py
-│ ├── urls.py
-│ ├── wsgi.py
-│ ├── asgi.py
-│ └── views.py
-│
-├── templates/ → HTML Files
-│ ├── base.html
-│ ├── index.html
-│ └── animation.html
-│
-├── static/ → CSS / JS (if used)
-│ ├── css/
-│ └── js/
-│
-├── assets/ → Sign Language Videos
-│ ├── A.mp4
-│ ├── B.mp4
-│ ├── Hello.mp4
-│ ├── Thank.mp4
-│ └── ...
-│
-├── media/ → (Optional uploads)
-│
-└── env/ → Virtual Environment
+
 
 ---
 
@@ -230,7 +198,7 @@ This makes the model:
 ## 🔹 Static Alphabet Model
 
 - 63 landmark features
-- SVM (RBF kernel)
+- SVM 
 - StandardScaler preprocessing
 - Label encoding
 - 80/20 train-test split
@@ -262,14 +230,12 @@ Because words involve motion. A single frame cannot capture movement.
 Custom dataset recorders were built.
 
 ## Static Alphabet Dataset
-- 30 samples per letter
+- 20 samples per letter
 - Total ≈ 780 samples
 - Saved as X.npy and y.npy
 
 ## Word Dataset
 - 20 samples per word
-- Multi-frame capture
-- 1512 features per sample
 
 ---
 
@@ -301,7 +267,7 @@ Custom dataset recorders were built.
 # 📈 8. Accuracy
 
 - Alphabet Model: ~90–95%
-- Word Model: ~75–85%
+- Word Model: ~92%
 
 Accuracy depends on:
 - Lighting
@@ -459,52 +425,18 @@ Academic Project – Educational Use Only
 
 ---
 
-# 🎓 Developed As
-
-Final Year AI-Based Communication System Project
-
-
-
-
-# Changes i made
-i changed the versions in requirements.txt to match my python version of 3.12.3
-- changed in numpy,opencv,mediapipe,protobuf,tensorflow
-- also added scikit-learn in requirements.txt
-- i trained the model first by increasing the samples_per_letter to 50 from 30, reduced min_detection_confidence to 0.5 from 0.7, and reduced time.sleep from 0.4 to 0.2(in record_alphabet_static.py folder)
-- but it was only showing number 25 in the detected sign instead of a value, even if new signs were shown(in live detection)
-- this was because the value was not been converted to alphabet, and the number was straight introduced. and 25 was the letter 'z'
-- even when i fixed it, the accuracy was off
-- the model was broken, only 3.85 percent accuracy on training data itself
-- so i retrained the model again, but the accuracy only pumped to 40 percent
-- so i tried data augmentation(which means to add horizontally flipped versions of each sample) and also added probabiity=True for proper confidence scores(on train_alphabets_static.py)
-- this increased the accuracy to 90 percent, but still some letters were not accurate
-- so i added feature extraction to it and retrained the data again
-
-# changes i made after the previous changes
-- This is based for live detection model
-- model was trained on asl, but the model needs to be trained in isl data. so changed the max_num_hands = 2 instead of 1 in record_alpabets_static.py
-- the earlier model was trained on static alphabetic model(static_image_mode= true), but isl requires motion, so we change from training one frame to training 12 consecutive frames(sequential frames)
-- for the model, we used flatten + SVM(similar to words)
-- removed record_alphabets_static.py and train_alphabets_static.py and created new record and train sequence.py file(since the static was based on asl and was trained on static data)
-- this time, i only focused on feature extraction first, and based on the accuracy, will check whether to add data augmentation or not
-- also updates code in a2sl/ views.py
-- i was met with an issue where the whole recording process was taking around 20 mins, which was very long
-- this was because each frame(total of 50 frames for each letter) had a 15 frame stability to be processed, which was taking a lot of time(eg: 15 stability for 1 frame of letter 'a', till 50 frames )
-- so i went with an option of reducing to 20 samples per letter and removed stability requirement(since letters now require motion), thereby reducing the time to 5-6 minutes for training
-
-- i came back to the static data itself instead of sequential data, and the views.py(earlier updated for sequence mode) was reverted back to static mode for live detection
-  
+# For better accuracy for words and alphabets
+- Run the script in virtual environment that you create
+```bash
+cd live_sign
+python record_alphabets_static.py
+```
+-  show each letter to the webcam, hold steady - captures automatically(make sure enough light is present when capturing letters)
+-  After that , run this script in the same folder for training data
+```bash
+python train_alphabets_static.py
+```
+- for **words** part, simply exchange the file names for recording and training words in the script
 
 
-- now comes the word section, where i recorded and trained words in the records file with 68 percent accuracy
-- but the signs were not picked up in ui, this was because there was a mismatch during training and in views
-- training used raw landmark coordinated whereas in views, used wrist-normalized coordinates
-- so changed views and made it similar to training method and reduced min detection and tracking confidence to 0.7 from 0.5(reduction part in mediapipe)
-- still error was persistent, the output was shown but it was clearing fast without waiting for another hand signal
-- this was due to aggressive buffer clearing, where after prediction the buffer is cleared immediately
-- so inorder to fix that, sliding window logic is introduced and word_frame_buffer.clear()is removed(code in views.py)
-- still the error is formed,so we changed views.py to event based prediction
-- the whole process was completed, but the accuracy for predicting words was very low(and only worked on stable and not motion movements)
-- so changed again in records and views.py to incorporate wrist normalization similar to alphabets
-- again faced an error, recording didnt pick up. This was wrist = np.array([hand_landmarks[0]]) need to use .landmark[0] at the end
-- now model accuracy increased from 64.5 to 92.86
+
